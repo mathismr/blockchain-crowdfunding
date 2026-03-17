@@ -1,0 +1,13 @@
+{
+  "name": "crowdfunding-dapp",
+  "version": "1.0.0",
+  "description": "DApp de crowdfunding avec Web3.js et MetaMask sur Ganache",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

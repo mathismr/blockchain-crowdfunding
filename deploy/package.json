@@ -1,0 +1,13 @@
+{
+  "name": "crowdfunding-deployer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "node deploy.js"
+  },
+  "dependencies": {
+    "solc": "0.8.24",
+    "web3": "^1.10.4",
+    "@openzeppelin/contracts": "4.9.6"
+  }
+}

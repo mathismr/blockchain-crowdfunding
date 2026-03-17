@@ -1,0 +1,64 @@
+services:
+  # ========================================
+  # Blockchain locale (Ganache)
+  # ========================================
+  ganache:
+    image: trufflesuite/ganache:latest
+    container_name: crowdfund-ganache
+    ports:
+      - "7545:8545"
+    command:
+      - "--chain.chainId=1337"
+      - "--wallet.totalAccounts=10"
+      - "--wallet.defaultBalance=100"
+      - "--miner.blockGasLimit=30000000"
+      - "--chain.hardfork=merge"
+      - "--database.dbPath=/ganache-data"
+    volumes:
+      - ganache-data:/ganache-data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8545', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})}).then(r=>r.json()).then(d=>{if(d.result)process.exit(0);else process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ========================================
+  # Déploiement automatique des contrats
+  # ========================================
+  deployer:
+    build:
+      context: .
+      dockerfile: Dockerfile.deployer
+    container_name: crowdfund-deployer
+    environment:
+      - GANACHE_URL=http://ganache:8545
+      - OUTPUT_PATH=/shared/config.json
+    volumes:
+      - shared-config:/shared
+    depends_on:
+      ganache:
+        condition: service_healthy
+
+  # ========================================
+  # Interface Web (frontend + API)
+  # ========================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: crowdfund-web
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    volumes:
+      - shared-config:/shared:ro
+    depends_on:
+      deployer:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  ganache-data:
+  shared-config:

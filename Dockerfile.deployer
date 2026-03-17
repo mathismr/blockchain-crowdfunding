@@ -1,0 +1,15 @@
+FROM node:18-alpine
+
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copier package.json et installer les dépendances
+COPY deploy/package.json ./
+RUN npm install
+
+# Copier les contrats et le script de déploiement
+COPY contracts-docker/ ./contracts/
+COPY deploy/deploy.js ./
+
+CMD ["node", "deploy.js"]

@@ -4,7 +4,9 @@ Application web décentralisée de crowdfunding avec NFT, utilisant Solidity, We
 
 > [!NOTE]
 > Projet académique réalisé dans le cadre de la matière Blockchain 
+> 
 > L'objectif de ce projet était l'apprentissage du langage Solidity et la rédaction de contrats
+> 
 > Usage d'Opus 4.6 Extended pour le frond-end et pour la dockerisation du projet
 
 ---

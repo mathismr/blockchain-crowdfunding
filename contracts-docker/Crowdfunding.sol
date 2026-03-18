@@ -77,16 +77,36 @@ contract Crowdfunding is Ownable, ERC721 {
         require(msg.value > 0, "Invalid amount");
 
         bool tierFound = false;
+        bool userAlreadyInTier = false;
         uint contributorTierIndex;
-        for (uint i = 0; i < tiers.length; i++) {
-            if (msg.value >= tiers[i].minAmount) {
-                if (!tierFound || tiers[i].minAmount > tiers[contributorTierIndex].minAmount) {
-                    contributorTierIndex = i;
-                    tierFound = true;
+
+        if (contributions[msg.sender] == 0) {
+            
+            for (uint i = 0; i < tiers.length; i++) {
+                if (msg.value >= tiers[i].minAmount) {
+                    if (!tierFound || tiers[i].minAmount > tiers[contributorTierIndex].minAmount) {
+                        contributorTierIndex = i;
+                        tierFound = true;
+                    }
                 }
             }
-        }
+        } else {
+            contributorTierIndex = contributorTier[msg.sender];
+            ContributionTier storage currentTier = tiers[contributorTierIndex];
+            userAlreadyInTier = true;
+            tierFound = true;
+            
+            if (contributions[msg.sender] >= tiers[contributorTierIndex + 1].minAmount) { // Updated total contributions of user is greater than the next tier minimum amount
+                currentTier.contributorCount--; // Update old tier
 
+                contributorTierIndex++;
+                ContributionTier storage newTier = tiers[contributorTierIndex];
+                newTier.contributorCount++;
+
+                contributorTier[msg.sender] = contributorTierIndex; // Update user tier
+            }
+        }
+        
         require(tierFound, "No tier found");
         require(tiers[contributorTierIndex].contributorCount < tiers[contributorTierIndex].maxContributors, "Tier is full");
 
@@ -94,7 +114,11 @@ contract Crowdfunding is Ownable, ERC721 {
         totalContributions += msg.value;
         contributions[msg.sender] += msg.value;
         contributorTier[msg.sender] = contributorTierIndex;
-        tier.contributorCount++;
+        
+        if (!userAlreadyInTier) { // Prevent tiers from incrementing contributorCount if user is already in that tier
+            tier.contributorCount++;
+        }
+
         hasClaimedNFT[msg.sender] = false;
 
         emit Contribution(msg.sender, msg.value);

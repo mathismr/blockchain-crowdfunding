@@ -22,6 +22,8 @@ contract Crowdfunding is Ownable, ERC721 {
 
     // STATE VARIABLES
     //
+    string public title;
+    string public description;
     uint public targetAmount;
     uint256 public deadline;
 
@@ -35,18 +37,23 @@ contract Crowdfunding is Ownable, ERC721 {
     bool private isCampaignFinished = false;
     ContributionTier[] private tiers;
 
-    constructor(uint _targetAmount, uint _nb_days) ERC721("CrowdfundingNFT", "CFT") {
+    constructor(string memory _title, string memory _description, uint _targetAmount, uint _nb_days) ERC721("CrowdfundingNFT", "CFT") {
+        require(bytes(_title).length > 0, "_title shall not be empty");
         require(_targetAmount > 0, "_targetAmount shall be greater than 0");
         require(_nb_days > 0, "_nb_days shall be greater than 0");
         require(_nb_days <= 30, "_nb_days shall not be greater than 30");
 
         transferOwnership(msg.sender);
+        title = _title;
+        description = _description;
         targetAmount = _targetAmount;
         deadline = block.timestamp + (_nb_days * 1 days);
     }
 
     // GETTERS
     //
+    function getTitle() public view returns (string memory) { return title; }
+    function getDescription() public view returns (string memory) { return description; }
     function getTotalContributions() public view returns (uint) { return totalContributions; }
     function getTimeLeft() public view returns (uint) { return block.timestamp < deadline ? deadline - block.timestamp : 0; }
     function getIsCampaignActive() public view returns (bool) { return isCampaignActive; }
@@ -60,6 +67,13 @@ contract Crowdfunding is Ownable, ERC721 {
 
     // FUNCTIONS
     //
+
+    /// @notice Réduit le temps restant de la campagne à 1 minute (pour démonstration uniquement)
+    function reduceTimeForDemo() public onlyOwner {
+        require(block.timestamp < deadline, "Campaign is already finished");
+        deadline = block.timestamp + 60;
+    }
+
     function setIsCampaignActive(bool _status) public onlyOwner {
         isCampaignActive = _status;
         if (!_status) { emit Status("Campaign is closed"); }

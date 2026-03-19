@@ -3,7 +3,12 @@
 // ===========================================
 const FACTORY_ABI = [
     {
-        "inputs": [{ "name": "_targetAmount", "type": "uint256" }, { "name": "_nbDays", "type": "uint256" }],
+        "inputs": [
+            { "name": "_title", "type": "string" },
+            { "name": "_description", "type": "string" },
+            { "name": "_targetAmount", "type": "uint256" },
+            { "name": "_nbDays", "type": "uint256" }
+        ],
         "name": "createCampaign",
         "outputs": [{ "name": "", "type": "address" }],
         "stateMutability": "nonpayable",
@@ -35,6 +40,7 @@ const FACTORY_ABI = [
         "inputs": [
             { "indexed": true, "name": "creator", "type": "address" },
             { "indexed": false, "name": "campaignAddress", "type": "address" },
+            { "indexed": false, "name": "title", "type": "string" },
             { "indexed": false, "name": "targetAmount", "type": "uint256" },
             { "indexed": false, "name": "nbDays", "type": "uint256" }
         ],
@@ -48,6 +54,34 @@ const FACTORY_ABI = [
 // ===========================================
 const CROWDFUNDING_ABI = [
     // --- View functions ---
+    {
+        "inputs": [],
+        "name": "getTitle",
+        "outputs": [{ "name": "", "type": "string" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getDescription",
+        "outputs": [{ "name": "", "type": "string" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "title",
+        "outputs": [{ "name": "", "type": "string" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "description",
+        "outputs": [{ "name": "", "type": "string" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
     {
         "inputs": [],
         "name": "getTotalContributions",
@@ -151,6 +185,13 @@ const CROWDFUNDING_ABI = [
     },
     // --- State-changing functions ---
     {
+        "inputs": [],
+        "name": "reduceTimeForDemo",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [{ "name": "_status", "type": "bool" }],
         "name": "setIsCampaignActive",
         "outputs": [],
@@ -218,6 +259,12 @@ const CROWDFUNDING_ABI = [
         "anonymous": false,
         "inputs": [{ "indexed": false, "name": "amount", "type": "uint256" }],
         "name": "FundsClaimed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [{ "indexed": true, "name": "contributor", "type": "address" }],
+        "name": "ClaimedNFT",
         "type": "event"
     },
     {

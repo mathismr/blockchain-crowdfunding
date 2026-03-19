@@ -156,9 +156,17 @@ function formatTimeLeft(seconds) {
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
     if (d > 0) return `${d}j ${h}h ${m}m`;
     if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function showToast(message, type = 'info') {
@@ -305,7 +313,9 @@ async function renderHome() {
         for (const addr of campaigns) {
             try {
                 const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
-                const [target, total, timeLeft, isActive, isFinished, owner, tiers] = await Promise.all([
+                const [campaignTitle, campaignDesc, target, total, timeLeft, isActive, isFinished, owner, tiers] = await Promise.all([
+                    contract.methods.getTitle().call(),
+                    contract.methods.getDescription().call(),
                     contract.methods.getTargetAmount().call(),
                     contract.methods.getTotalContributions().call(),
                     contract.methods.getTimeLeft().call(),
@@ -315,7 +325,8 @@ async function renderHome() {
                     contract.methods.getTiers().call()
                 ]);
 
-                const pct = Number(target) > 0 ? Math.min(100, (Number(total) * 100) / Number(target)) : 0;
+                const displayTotal = isFinished ? target : total;
+                const pct = Number(target) > 0 ? Math.min(100, (Number(displayTotal) * 100) / Number(target)) : 0;
                 const isOwner = owner.toLowerCase() === currentAccount.toLowerCase();
 
                 let statusClass = 'status-active';
@@ -324,18 +335,22 @@ async function renderHome() {
                 else if (!isActive) { statusClass = 'status-closed'; statusText = 'Fermée'; }
                 else if (Number(timeLeft) === 0) { statusClass = 'status-expired'; statusText = 'Expirée'; }
 
+                const truncatedDesc = campaignDesc.length > 80 ? campaignDesc.substring(0, 80) + '...' : campaignDesc;
+
                 cardsHTML += `
                     <div class="campaign-card" onclick="navigateTo('campaign/${addr}')">
                         <div class="card-header-row">
                             <span class="status-badge ${statusClass}">${statusText}</span>
                             ${isOwner ? '<span class="owner-badge">Propriétaire</span>' : ''}
                         </div>
+                        <div class="card-title">${escapeHtml(campaignTitle)}</div>
+                        <div class="card-description">${escapeHtml(truncatedDesc)}</div>
                         <div class="card-address">${shortAddr(addr)}</div>
                         <div class="card-tiers">${tiers.length} tier${tiers.length > 1 ? 's' : ''}</div>
                         <div class="progress-section">
                             <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
                             <div class="progress-row">
-                                <span>${weiToEth(total)} ETH</span>
+                                <span>${weiToEth(displayTotal)} ETH</span>
                                 <span class="target-label">sur ${weiToEth(target)} ETH</span>
                             </div>
                         </div>
@@ -392,7 +407,9 @@ async function renderCampaignDetail(addr) {
 
     try {
         const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
-        const [target, total, timeLeft, isActive, isFinished, owner, tiers, myContrib] = await Promise.all([
+        const [campaignTitle, campaignDesc, target, total, timeLeft, isActive, isFinished, owner, tiers, myContrib] = await Promise.all([
+            contract.methods.getTitle().call(),
+            contract.methods.getDescription().call(),
             contract.methods.getTargetAmount().call(),
             contract.methods.getTotalContributions().call(),
             contract.methods.getTimeLeft().call(),
@@ -403,11 +420,14 @@ async function renderCampaignDetail(addr) {
             contract.methods.getMyContribution().call({ from: currentAccount })
         ]);
 
-        const pct = Number(target) > 0 ? Math.min(100, (Number(total) * 100) / Number(target)) : 0;
+        // Si la campagne est terminée avec succès, les fonds ont été réclamés (total = 0 on-chain)
+        // On affiche l'objectif comme montant collecté puisque la campagne a réussi
+        const displayTotal = isFinished ? target : total;
+        const pct = Number(target) > 0 ? Math.min(100, (Number(displayTotal) * 100) / Number(target)) : 0;
         const isOwner = owner.toLowerCase() === currentAccount.toLowerCase();
         const expired = Number(timeLeft) === 0;
         const canContribute = isActive && !expired && !isFinished;
-        const canRefund = (!isActive || expired) && Number(total) < Number(target) && Number(myContrib) > 0;
+        const canRefund = !isFinished && (!isActive || expired) && Number(total) < Number(target) && Number(myContrib) > 0;
         const canClaimNFT = isFinished && Number(myContrib) > 0;
 
         let statusClass = 'status-active';
@@ -421,7 +441,7 @@ async function renderCampaignDetail(addr) {
         if (tiers.length > 0) {
             tiersHTML = tiers.map((t, i) => `
                 <div class="tier-card">
-                    <div class="tier-name">${t.name}</div>
+                    <div class="tier-name">${escapeHtml(t.name)}</div>
                     <div class="tier-amount">Min: ${weiToEth(t.minAmount)} ETH</div>
                     <div class="tier-slots">${t.contributorCount} / ${t.maxContributors} places</div>
                     <div class="tier-progress-bar"><div class="tier-progress-fill" style="width:${Number(t.maxContributors) > 0 ? (Number(t.contributorCount)*100/Number(t.maxContributors)) : 0}%"></div></div>
@@ -437,7 +457,8 @@ async function renderCampaignDetail(addr) {
             
             <div class="detail-header">
                 <div>
-                    <h1>Campagne</h1>
+                    <h1>${escapeHtml(campaignTitle)}</h1>
+                    <p class="campaign-description">${escapeHtml(campaignDesc)}</p>
                     <div class="detail-address">${addr}</div>
                 </div>
                 <div class="detail-badges">
@@ -454,7 +475,7 @@ async function renderCampaignDetail(addr) {
                         <div class="big-progress">
                             <div class="big-progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
                             <div class="big-progress-info">
-                                <span class="big-amount">${weiToEth(total)} ETH</span>
+                                <span class="big-amount">${weiToEth(displayTotal)} ETH</span>
                                 <span class="big-target">/ ${weiToEth(target)} ETH (${pct.toFixed(1)}%)</span>
                             </div>
                         </div>
@@ -551,7 +572,9 @@ async function renderAdmin(addr) {
 
     try {
         const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
-        const [target, total, timeLeft, isActive, isFinished, owner, tiers] = await Promise.all([
+        const [campaignTitle, campaignDesc, target, total, timeLeft, isActive, isFinished, owner, tiers] = await Promise.all([
+            contract.methods.getTitle().call(),
+            contract.methods.getDescription().call(),
             contract.methods.getTargetAmount().call(),
             contract.methods.getTotalContributions().call(),
             contract.methods.getTimeLeft().call(),
@@ -571,16 +594,18 @@ async function renderAdmin(addr) {
             return;
         }
 
-        const pct = Number(target) > 0 ? Math.min(100, (Number(total) * 100) / Number(target)) : 0;
+        const displayTotal = isFinished ? target : total;
+        const pct = Number(target) > 0 ? Math.min(100, (Number(displayTotal) * 100) / Number(target)) : 0;
         const expired = Number(timeLeft) === 0;
         const canClaim = expired && Number(total) >= Number(target) && isActive;
+        const canReduceTime = !expired && !isFinished;
 
         let tiersHTML = tiers.map((t, i) => `
             <tr>
-                <td>${t.name}</td>
+                <td>${escapeHtml(t.name)}</td>
                 <td>${weiToEth(t.minAmount)} ETH</td>
                 <td>${t.contributorCount} / ${t.maxContributors}</td>
-                <td class="tier-uri" title="${t.tokenURI}">${t.tokenURI.length > 30 ? t.tokenURI.substring(0,30)+'...' : t.tokenURI}</td>
+                <td class="tier-uri" title="${escapeHtml(t.tokenURI)}">${t.tokenURI.length > 30 ? escapeHtml(t.tokenURI.substring(0,30))+'...' : escapeHtml(t.tokenURI)}</td>
             </tr>
         `).join('');
 
@@ -594,7 +619,8 @@ async function renderAdmin(addr) {
             
             <div class="detail-header">
                 <div>
-                    <h1>Administration</h1>
+                    <h1>Administration — ${escapeHtml(campaignTitle)}</h1>
+                    <p class="campaign-description">${escapeHtml(campaignDesc)}</p>
                     <div class="detail-address">${addr}</div>
                 </div>
             </div>
@@ -609,7 +635,7 @@ async function renderAdmin(addr) {
                             <div class="stat-label">Objectif</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value">${weiToEth(total)} ETH (${pct.toFixed(1)}%)</div>
+                            <div class="stat-value">${weiToEth(displayTotal)} ETH (${pct.toFixed(1)}%)</div>
                             <div class="stat-label">Collecté</div>
                         </div>
                         <div class="stat-box">
@@ -634,6 +660,9 @@ async function renderAdmin(addr) {
                         `}
                         ${canClaim ? `
                             <button class="btn btn-accent" onclick="doClaimFunds('${addr}')">Réclamer les fonds (${weiToEth(total)} ETH)</button>
+                        ` : ''}
+                        ${canReduceTime ? `
+                            <button class="btn btn-outline" onclick="doReduceTime('${addr}')" title="Réduit le temps restant à 1 minute (pour démonstration)">⏩ Réduire à 1 min (démo)</button>
                         ` : ''}
                     </div>
                 </div>
@@ -703,6 +732,14 @@ function renderDeploy() {
             <p class="muted">Déployez un nouveau contrat de crowdfunding sur la blockchain.</p>
             <div class="form-grid">
                 <div class="form-group">
+                    <label>Titre de la campagne</label>
+                    <input type="text" id="deploy-title" placeholder="Ex: Financer mon projet open source" class="input-field" maxlength="100" />
+                </div>
+                <div class="form-group form-group-full">
+                    <label>Description</label>
+                    <textarea id="deploy-description" placeholder="Décrivez votre campagne en quelques phrases..." class="input-field" rows="3" maxlength="500"></textarea>
+                </div>
+                <div class="form-group">
                     <label>Objectif (en Wei)</label>
                     <input type="number" id="deploy-target" placeholder="Ex: 5000000000000000000 (= 5 ETH)" class="input-field" min="1" />
                     <small class="input-hint">Entrez le montant en Wei. 1 ETH = 1000000000000000000 Wei</small>
@@ -725,9 +762,12 @@ function renderDeploy() {
 // Actions blockchain
 // ===========================================
 async function doDeploy() {
+    const title = document.getElementById('deploy-title').value.trim();
+    const description = document.getElementById('deploy-description').value.trim();
     const target = document.getElementById('deploy-target').value;
     const days = document.getElementById('deploy-days').value;
 
+    if (!title) return showToast('Titre requis.', 'error');
     if (!target || Number(target) <= 0) return showToast('Objectif invalide.', 'error');
     if (!days || Number(days) < 1 || Number(days) > 30) return showToast('Durée invalide (1-30 jours).', 'error');
 
@@ -736,7 +776,7 @@ async function doDeploy() {
     btn.textContent = 'Déploiement en cours...';
 
     try {
-        const tx = await factoryContract.methods.createCampaign(target, days).send({ from: currentAccount, gas: 5000000 });
+        const tx = await factoryContract.methods.createCampaign(title, description, target, days).send({ from: currentAccount, gas: 5000000 });
         const event = tx.events.CampaignCreated;
         const newAddr = event ? event.returnValues.campaignAddress : null;
         showToast('Campagne déployée avec succès !', 'success');
@@ -780,12 +820,113 @@ async function doRefund(addr) {
 async function doClaimNFT(addr) {
     try {
         const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
+
+        // Récupérer le tier et le tokenURI du contributeur avant le claim
+        const tierName = await contract.methods.getContributorTier(currentAccount).call();
+        const tiers = await contract.methods.getTiers().call();
+        const myTier = tiers.find(t => t.name === tierName);
+        const tokenURI = myTier ? myTier.tokenURI : '';
+
         await contract.methods.claimNFT().send({ from: currentAccount, gas: 300000 });
-        showToast('NFT réclamé avec succès !', 'success');
+
+        showNFTRewardPopup(tierName, tokenURI);
         renderCampaignDetail(addr);
     } catch (err) {
         console.error(err);
         showToast('Erreur : ' + extractRevertReason(err), 'error');
+    }
+}
+
+function showNFTRewardPopup(tierName, tokenURI) {
+    // Supprimer un éventuel ancien popup
+    const existing = document.getElementById('nft-reward-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'nft-reward-overlay';
+    overlay.innerHTML = `
+        <style>
+            #nft-reward-overlay {
+                position: fixed; inset: 0; z-index: 10000;
+                background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+                display: flex; align-items: center; justify-content: center;
+                animation: nftOverlayIn 0.3s ease;
+            }
+            @keyframes nftOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+            .nft-popup {
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                border: 2px solid #e2b93b; border-radius: 20px;
+                padding: 2.5rem; max-width: 440px; width: 90%;
+                text-align: center; position: relative; overflow: hidden;
+                box-shadow: 0 0 60px rgba(226,185,59,0.3), 0 20px 60px rgba(0,0,0,0.5);
+                animation: nftPopIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+            @keyframes nftPopIn { from { transform: scale(0.5) translateY(40px); opacity:0; } to { transform: scale(1) translateY(0); opacity:1; } }
+            .nft-popup .nft-sparkles { font-size: 3rem; margin-bottom: 0.5rem; animation: nftBounce 1s ease infinite; }
+            @keyframes nftBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+            .nft-popup h2 { color: #e2b93b; font-size: 1.6rem; margin: 0.5rem 0 0.3rem; font-weight: 800; letter-spacing: 0.5px; }
+            .nft-popup .nft-subtitle { color: #a0aec0; font-size: 0.95rem; margin-bottom: 1.5rem; }
+            .nft-popup .nft-tier-badge {
+                display: inline-block; background: linear-gradient(135deg, #e2b93b, #f5d76e);
+                color: #1a1a2e; font-weight: 700; font-size: 1.1rem;
+                padding: 0.5rem 1.5rem; border-radius: 50px; margin-bottom: 1.2rem;
+            }
+            .nft-popup .nft-uri-section { margin: 1rem 0; text-align: left; }
+            .nft-popup .nft-uri-label { color: #a0aec0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem; }
+            .nft-popup .nft-uri-value {
+                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 10px; padding: 0.75rem 1rem; color: #63b3ed;
+                font-family: monospace; font-size: 0.85rem; word-break: break-all;
+                cursor: pointer; transition: background 0.2s;
+            }
+            .nft-popup .nft-uri-value:hover { background: rgba(255,255,255,0.14); }
+            .nft-popup .nft-copy-hint { color: #718096; font-size: 0.75rem; margin-top: 0.4rem; text-align: right; }
+            .nft-popup .nft-close-btn {
+                margin-top: 1.5rem; background: transparent; border: 2px solid #e2b93b;
+                color: #e2b93b; font-size: 1rem; font-weight: 600; padding: 0.6rem 2rem;
+                border-radius: 10px; cursor: pointer; transition: all 0.2s;
+            }
+            .nft-popup .nft-close-btn:hover { background: #e2b93b; color: #1a1a2e; }
+            .nft-confetti { position: absolute; width: 8px; height: 8px; border-radius: 2px; top: -10px; animation: nftFall linear forwards; }
+            @keyframes nftFall { to { transform: translateY(500px) rotate(720deg); opacity: 0; } }
+        </style>
+        <div class="nft-popup">
+            <div class="nft-sparkles">🏆</div>
+            <h2>NFT Réclamé !</h2>
+            <p class="nft-subtitle">Félicitations, votre NFT de contributeur est à vous !</p>
+            <div class="nft-tier-badge">${escapeHtml(tierName)}</div>
+            ${tokenURI ? `
+                <div class="nft-uri-section">
+                    <div class="nft-uri-label">Token URI</div>
+                    <div class="nft-uri-value" onclick="navigator.clipboard.writeText('${tokenURI.replace(/'/g, "\\'")}').then(() => { this.nextElementSibling.textContent = '✅ Copié !' })" title="Cliquer pour copier">
+                        ${escapeHtml(tokenURI)}
+                    </div>
+                    <div class="nft-copy-hint">Cliquer pour copier</div>
+                </div>
+            ` : ''}
+            <button class="nft-close-btn" onclick="document.getElementById('nft-reward-overlay').remove()">Fermer</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Fermer en cliquant sur l'overlay (hors popup)
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+
+    // Confettis
+    const colors = ['#e2b93b', '#f5d76e', '#63b3ed', '#68d391', '#fc8181', '#b794f4', '#f6ad55'];
+    for (let i = 0; i < 40; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'nft-confetti';
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+        confetti.style.animationDelay = (Math.random() * 0.8) + 's';
+        confetti.style.width = (5 + Math.random() * 6) + 'px';
+        confetti.style.height = (5 + Math.random() * 6) + 'px';
+        overlay.querySelector('.nft-popup').appendChild(confetti);
     }
 }
 
@@ -806,6 +947,18 @@ async function doSetActive(addr, status) {
         const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
         await contract.methods.setIsCampaignActive(status).send({ from: currentAccount, gas: 200000 });
         showToast(status ? 'Campagne réactivée.' : 'Campagne désactivée.', 'success');
+        renderAdmin(addr);
+    } catch (err) {
+        console.error(err);
+        showToast('Erreur : ' + extractRevertReason(err), 'error');
+    }
+}
+
+async function doReduceTime(addr) {
+    try {
+        const contract = new web3.eth.Contract(CROWDFUNDING_ABI, addr);
+        await contract.methods.reduceTimeForDemo().send({ from: currentAccount, gas: 200000 });
+        showToast('Deadline réduite à 1 minute ! ⏩', 'success');
         renderAdmin(addr);
     } catch (err) {
         console.error(err);

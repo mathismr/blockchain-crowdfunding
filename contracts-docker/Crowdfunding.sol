@@ -80,9 +80,8 @@ contract Crowdfunding is Ownable, ERC721 {
         bool userAlreadyInTier = false;
         uint contributorTierIndex;
 
-        if (contributions[msg.sender] == 0) {
-            
-            for (uint i = 0; i < tiers.length; i++) {
+        if (contributions[msg.sender] == 0) { // Check if user has already contributed
+            for (uint i = 0; i < tiers.length; i++) { // Loop threw tiers to attribute a tier to user
                 if (msg.value >= tiers[i].minAmount) {
                     if (!tierFound || tiers[i].minAmount > tiers[contributorTierIndex].minAmount) {
                         contributorTierIndex = i;
